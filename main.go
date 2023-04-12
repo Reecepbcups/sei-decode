@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -19,9 +18,9 @@ import (
 	"github.com/CosmosContracts/juno/v13/app/params"
 )
 
-func main() {
-	fmt.Println("Starting Juno Network Lightweight Decoder")
+// juno-decode tx decode <tx-b64>
 
+func main() {
 	rootCmd, _ := NewRootCmd()
 	if err := svrcmd.Execute(rootCmd, app.DefaultNodeHome); err != nil {
 		switch e := err.(type) {
