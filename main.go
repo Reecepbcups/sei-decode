@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client"
 
@@ -92,7 +95,66 @@ func txCommand() *cobra.Command {
 
 	cmd.AddCommand(
 		authcmd.GetDecodeCommand(),
+		GetFileDecodeCommand(),
 	)
+
+	return cmd
+}
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+// create a struct which is {"key":"value"} with both being strings
+
+// GetDecodeCommand returns the decode command to take serialized bytes and turn
+// it into a JSON-encoded transaction.
+func GetFileDecodeCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "decode-file [file]",
+		Short: "Decode a bunch of amino bytre strings in 1 file",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			clientCtx := client.GetClientContextFromCmd(cmd)
+			var txBytes []byte
+
+			dat, err := os.ReadFile("amino.json")
+			check(err)
+			// fmt.Print(string(dat))
+
+			values := []string{}
+			err = json.Unmarshal(dat, &values)
+			check(err)
+
+			// fmt.Println(values)
+
+			new_values := []string{}
+			for _, value := range values {
+				txBytes, err = base64.StdEncoding.DecodeString(value)
+				if err != nil {
+					return err
+				}
+
+				tx, err := clientCtx.TxConfig.TxDecoder()(txBytes)
+				if err != nil {
+					return err
+				}
+
+				json, err := clientCtx.TxConfig.TxJSONEncoder()(tx)
+				if err != nil {
+					return err
+				}
+
+				new_values = append(new_values, string(json))
+			}
+
+			// return new_values (or do we save to a file maybe?)
+			return clientCtx.PrintBytes([]byte(strings.Join(new_values, ";;;")))
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
 
 	return cmd
 }
