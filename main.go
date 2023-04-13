@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
-	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client"
 
@@ -109,30 +108,39 @@ func check(e error) {
 
 // create a struct which is {"key":"value"} with both being strings
 
+// ID is the unique ID for the SQL database
+
+type Decode struct {
+	ID int    `json:"id"`
+	Tx string `json:"tx"`
+}
+
+type Decodes []Decode
+
 // GetDecodeCommand returns the decode command to take serialized bytes and turn
 // it into a JSON-encoded transaction.
 func GetFileDecodeCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "decode-file [file]",
-		Short: "Decode a bunch of amino bytre strings in 1 file",
-		Args:  cobra.ExactArgs(1),
+		Use:   "decode-file [file] [output-file-name]",
+		Short: "Decode a bunch of amino bytre strings in 1 file. Then export",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			clientCtx := client.GetClientContextFromCmd(cmd)
 			var txBytes []byte
 
-			dat, err := os.ReadFile("amino.json")
+			dat, err := os.ReadFile(args[0])
 			check(err)
 			// fmt.Print(string(dat))
 
-			values := []string{}
+			var values Decodes
 			err = json.Unmarshal(dat, &values)
 			check(err)
 
 			// fmt.Println(values)
 
-			new_values := []string{}
+			var new_values []Decode
 			for _, value := range values {
-				txBytes, err = base64.StdEncoding.DecodeString(value)
+				txBytes, err = base64.StdEncoding.DecodeString(value.Tx)
 				if err != nil {
 					return err
 				}
@@ -147,11 +155,22 @@ func GetFileDecodeCommand() *cobra.Command {
 					return err
 				}
 
-				new_values = append(new_values, string(json))
+				new_values = append(new_values, Decode{
+					ID: value.ID,
+					Tx: string(json),
+				})
 			}
 
 			// return new_values (or do we save to a file maybe?)
-			return clientCtx.PrintBytes([]byte(strings.Join(new_values, ";;;")))
+			// return clientCtx.PrintBytes([]byte(strings.Join(new_values, ";;;")))
+
+			// save to output file
+			output, err := json.MarshalIndent(new_values, "", " ")
+			check(err)
+			err = os.WriteFile(args[1], output, 0644)
+			check(err)
+
+			return nil
 		},
 	}
 	flags.AddTxFlagsToCmd(cmd)
