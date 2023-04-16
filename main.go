@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
 
@@ -55,7 +56,7 @@ func NewRootCmd() (*cobra.Command, params.EncodingConfig) {
 		WithLegacyAmino(encodingConfig.Amino).
 		WithInput(os.Stdin).
 		// WithAccountRetriever(authtypes.AccountRetriever{}).
-		WithBroadcastMode(flags.BroadcastBlock).
+		// WithBroadcastMode(flags.BroadcastBlock).
 		// WithHomeDir(app.DefaultNodeHome).
 		WithViper("")
 
@@ -110,12 +111,10 @@ func check(e error) {
 	}
 }
 
-// create a struct which is {"key":"value"} with both being strings
-
-// ID is the unique ID for the SQL database
-
 type Decode struct {
-	ID int    `json:"id"`
+	// ID is the unique ID for the SQL database transaction
+	ID int `json:"id"`
+	// tx is the base64 amino in the input file, and the Decoded JSON in the output file
 	Tx string `json:"tx"`
 }
 
@@ -154,6 +153,7 @@ func GetFileDecodeCommand() *cobra.Command {
 		Short: "Decode a bunch of amino bytre strings in 1 file. Then export",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			start := time.Now()
 			// args := os.Args[1:]
 			if len(args) < 2 {
 				fmt.Println("Usage: ./juno-decoder tx decode-file input.json output.json")
@@ -175,8 +175,8 @@ func GetFileDecodeCommand() *cobra.Command {
 			var wg sync.WaitGroup
 
 			cores := runtime.NumCPU()
+			wg.Add(cores)
 			for i := 0; i < cores; i++ {
-				wg.Add(1)
 				go decodeTx(clientCtx, &wg, jobs, results)
 			}
 
@@ -196,6 +196,8 @@ func GetFileDecodeCommand() *cobra.Command {
 			check(err)
 			err = ioutil.WriteFile(args[1], output, 0644)
 			check(err)
+
+			fmt.Println("Time taken:", time.Since(start))
 
 			return nil
 		},

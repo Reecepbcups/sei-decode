@@ -6,5 +6,5 @@ install:
 build:
 	go build .
 
-test:
+test: install
 	${BIN} tx decode-file test.json output.json
