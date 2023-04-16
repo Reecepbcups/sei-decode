@@ -3,7 +3,11 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
+	"runtime"
+	"sync"
 
 	"github.com/cosmos/cosmos-sdk/client"
 
@@ -117,6 +121,31 @@ type Decode struct {
 
 type Decodes []Decode
 
+func decodeTx(clientCtx client.Context, wg *sync.WaitGroup, jobs <-chan Decode, results chan<- Decode) {
+	defer wg.Done()
+	for value := range jobs {
+		txBytes, err := base64.StdEncoding.DecodeString(value.Tx)
+		if err != nil {
+			panic(err)
+		}
+
+		tx, err := clientCtx.TxConfig.TxDecoder()(txBytes)
+		if err != nil {
+			panic(err)
+		}
+
+		json, err := clientCtx.TxConfig.TxJSONEncoder()(tx)
+		if err != nil {
+			panic(err)
+		}
+
+		results <- Decode{
+			ID: value.ID,
+			Tx: string(json),
+		}
+	}
+}
+
 // GetDecodeCommand returns the decode command to take serialized bytes and turn
 // it into a JSON-encoded transaction.
 func GetFileDecodeCommand() *cobra.Command {
@@ -125,49 +154,47 @@ func GetFileDecodeCommand() *cobra.Command {
 		Short: "Decode a bunch of amino bytre strings in 1 file. Then export",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			clientCtx := client.GetClientContextFromCmd(cmd)
-			var txBytes []byte
+			// args := os.Args[1:]
+			if len(args) < 2 {
+				fmt.Println("Usage: ./juno-decoder tx decode-file input.json output.json")
+				return
+			}
 
-			dat, err := os.ReadFile(args[0])
+			dat, err := ioutil.ReadFile(args[0])
 			check(err)
-			// fmt.Print(string(dat))
 
 			var values Decodes
 			err = json.Unmarshal(dat, &values)
 			check(err)
 
-			// fmt.Println(values)
+			clientCtx := client.GetClientContextFromCmd(cmd)
 
-			var new_values []Decode
-			for _, value := range values {
-				txBytes, err = base64.StdEncoding.DecodeString(value.Tx)
-				if err != nil {
-					return err
-				}
+			jobs := make(chan Decode, len(values))
+			results := make(chan Decode, len(values))
 
-				tx, err := clientCtx.TxConfig.TxDecoder()(txBytes)
-				if err != nil {
-					return err
-				}
+			var wg sync.WaitGroup
 
-				json, err := clientCtx.TxConfig.TxJSONEncoder()(tx)
-				if err != nil {
-					return err
-				}
-
-				new_values = append(new_values, Decode{
-					ID: value.ID,
-					Tx: string(json),
-				})
+			cores := runtime.NumCPU()
+			for i := 0; i < cores; i++ {
+				wg.Add(1)
+				go decodeTx(clientCtx, &wg, jobs, results)
 			}
 
-			// return new_values (or do we save to a file maybe?)
-			// return clientCtx.PrintBytes([]byte(strings.Join(new_values, ";;;")))
+			for _, value := range values {
+				jobs <- value
+			}
+			close(jobs)
 
-			// save to output file
-			output, err := json.MarshalIndent(new_values, "", " ")
+			newValues := make([]Decode, 0, len(values))
+			for i := 0; i < len(values); i++ {
+				newValues = append(newValues, <-results)
+			}
+
+			wg.Wait()
+
+			output, err := json.Marshal(newValues)
 			check(err)
-			err = os.WriteFile(args[1], output, 0644)
+			err = ioutil.WriteFile(args[1], output, 0644)
 			check(err)
 
 			return nil
