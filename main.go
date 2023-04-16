@@ -197,7 +197,7 @@ func GetFileDecodeCommand() *cobra.Command {
 			err = ioutil.WriteFile(args[1], output, 0644)
 			check(err)
 
-			fmt.Println("Time taken:", time.Since(start))
+			fmt.Println("Decode time taken:", time.Since(start))
 
 			return nil
 		},
