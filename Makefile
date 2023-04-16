@@ -7,4 +7,4 @@ build:
 	go build .
 
 test: install
-	${BIN} tx decode-file test.json output.json
+	${BIN} tx decode-file ./test/test.json ./test/output.json
