@@ -1,4 +1,4 @@
-BIN=juno-decode
+BIN=sei-decode
 
 install:
 	go install .
